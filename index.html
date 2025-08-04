@@ -208,75 +208,19 @@
             outputTbody.innerHTML = '';
 
             try {
-                let chatHistory = [];
-                const prompt = "Extract the Patient Name, Accession ID, and Modality/Study from the image. If there are multiple records, extract all of them. The Accession ID can be a combination of letters and numbers. Provide the output as a JSON array of objects, where each object has the keys 'patientName', 'accessionID', 'modalityStudy'.";
-                chatHistory.push({ role: "user", parts: [{ text: prompt }] });
-                
-                const payload = {
-                    contents: [
-                        {
-                            role: "user",
-                            parts: [
-                                { text: prompt },
-                                {
-                                    inlineData: {
-                                        mimeType: "image/jpeg",
-                                        data: base64ImageData
-                                    }
-                                }
-                            ]
-                        }
-                    ],
-                    generationConfig: {
-                        responseMimeType: "application/json",
-                        responseSchema: {
-                            type: "ARRAY",
-                            items: {
-                                type: "OBJECT",
-                                properties: {
-                                    "patientName": { "type": "STRING" },
-                                    "accessionID": { "type": "STRING" },
-                                    "modalityStudy": { "type": "STRING" }
-                                },
-                                "propertyOrdering": ["patientName", "accessionID", "modalityStudy"]
-                            }
-                        }
-                    }
-                };
+                // Call the Netlify Serverless function
+                const response = await fetch('/.netlify/functions/extract-info', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ base64ImageData: base64ImageData })
+                });
 
-                const apiKey = "";
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
-                
-                let retries = 0;
-                let response = null;
-                const maxRetries = 5;
-                const baseDelay = 1000;
-
-                while (retries < maxRetries) {
-                    try {
-                        response = await fetch(apiUrl, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(payload)
-                        });
-                        if (response.status !== 429) {
-                            break;
-                        }
-                    } catch (error) {
-                        console.error('Fetch failed:', error);
-                    }
-                    retries++;
-                    const delay = baseDelay * Math.pow(2, retries);
-                    await new Promise(resolve => setTimeout(resolve, delay));
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `API request failed with status ${response.status}`);
                 }
 
-                if (!response || !response.ok) {
-                    throw new Error(`API request failed with status ${response ? response.status : 'N/A'}`);
-                }
-
-                const result = await response.json();
-                const jsonText = result.candidates[0].content.parts[0].text;
-                const extractedDataArray = JSON.parse(jsonText);
+                const extractedDataArray = await response.json();
                 
                 // Populate the table with all records
                 extractedDataArray.forEach(extractedData => {
